@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>THE FRAUD FACTORY - Geographic Scale & The Conspirators</title>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet" />
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background: #000;
+            overflow: hidden;
+        }
+
+        #map {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* OVERLAY A - Map markers and connections */
+        #overlay-map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 50;
+            transition: opacity 0.5s ease;
+        }
+
+        #overlay-map.hidden {
+            opacity: 0;
+        }
+
+        #map-connections {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        /* OVERLAY B - Face network */
+        #overlay-network {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 60;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+            background: rgba(0, 0, 0, 0.45);
+        }
+
+        #overlay-network.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        #network-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* UI Elements */
+        .overlay-title {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            text-align: center;
+            pointer-events: none;
+        }
+
+        .overlay-title h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            text-shadow: 0 0 30px rgba(220, 53, 69, 0.8), 0 0 60px rgba(220, 53, 69, 0.4);
+            margin-bottom: 8px;
+        }
+
+        .overlay-title .subtitle {
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.8);
+            font-weight: 400;
+            letter-spacing: 0.05em;
+            transition: all 0.3s;
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .legend h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            margin-bottom: 15px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 0.85rem;
+            color: #fff;
+        }
+
+        .legend-marker {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            margin-right: 12px;
+        }
+
+        .stats-panel {
+            position: absolute;
+            top: 100px;
+            right: 30px;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 25px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            min-width: 200px;
+        }
+
+        .stats-panel h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            margin-bottom: 20px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .stat-row {
+            margin-bottom: 15px;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #dc3545;
+            line-height: 1;
+        }
+
+        .stat-label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 4px;
+        }
+
+        /* Toggle Button */
+        .toggle-container {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toggle-btn {
+            background: rgba(220, 53, 69, 0.9);
+            color: white;
+            border: none;
+            padding: 15px 20px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            cursor: pointer;
+            transition: all 0.3s;
+            min-width: 180px;
+        }
+
+        .toggle-btn:hover {
+            background: rgba(220, 53, 69, 1);
+            transform: scale(1.02);
+        }
+
+        .toggle-btn.active {
+            background: rgba(255, 255, 255, 0.9);
+            color: #dc3545;
+        }
+
+        .toggle-btn.secondary {
+            background: rgba(100, 100, 100, 0.8);
+        }
+
+        .toggle-btn.secondary:hover {
+            background: rgba(150, 150, 150, 0.9);
+        }
+
+        /* Popups */
+        .mapboxgl-popup-content {
+            background: rgba(0, 0, 0, 0.95) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 20px !important;
+            color: #fff;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .mapboxgl-popup-close-button {
+            color: #fff;
+            font-size: 20px;
+        }
+
+        .mapboxgl-popup-tip {
+            border-top-color: rgba(0, 0, 0, 0.95) !important;
+        }
+
+        .popup-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .popup-role {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .popup-detail {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .role-created, .role-fraud-factory { color: #dc3545; }
+        .role-enforced { color: #fd7e14; }
+        .role-coverup { color: #ffc107; }
+        .role-institutional { color: #adb5bd; }
+
+        /* Map Markers */
+        .map-marker {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: white;
+            border: 3px solid rgba(255,255,255,0.3);
+            transition: transform 0.2s, opacity 0.5s;
+        }
+
+        .map-marker:hover {
+            transform: scale(1.3);
+        }
+
+        .map-marker.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .map-marker-fraud-factory {
+            width: 60px;
+            height: 60px;
+            background: #dc3545;
+            animation: pulse-red 2s infinite;
+            font-size: 28px;
+            border: 4px solid rgba(255,255,255,0.5);
+        }
+
+        .map-marker-created { background: #dc3545; box-shadow: 0 0 20px #dc3545; }
+        .map-marker-enforced { background: #fd7e14; box-shadow: 0 0 20px #fd7e14; }
+        .map-marker-coverup { background: #ffc107; color: #000; box-shadow: 0 0 20px #ffc107; }
+        .map-marker-institutional { background: #6c757d; box-shadow: 0 0 20px #6c757d; }
+        .map-marker-victim { background: #fff; border: 4px solid #dc3545; color: #dc3545; }
+
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 0 20px #dc3545, 0 0 40px rgba(220, 53, 69, 0.5); transform: scale(1); }
+            50% { box-shadow: 0 0 50px #dc3545, 0 0 100px rgba(220, 53, 69, 0.8); transform: scale(1.05); }
+        }
+
+        /* Map connection lines */
+        .map-connection-line {
+            stroke: rgba(220, 53, 69, 0.7);
+            stroke-width: 2.5;
+            fill: none;
+            transition: opacity 0.5s;
+        }
+
+        .map-connection-glow {
+            stroke: rgba(220, 53, 69, 0.25);
+            stroke-width: 12;
+            fill: none;
+            filter: blur(4px);
+            transition: opacity 0.5s;
+        }
+
+        .map-connection-line.hidden, .map-connection-glow.hidden {
+            opacity: 0;
+        }
+
+        /* Network tooltip */
+        .network-tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 15px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            max-width: 300px;
+            z-index: 1000;
+            color: #fff;
+        }
+
+        .network-tooltip h4 {
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+        }
+
+        .network-tooltip .role {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .network-tooltip .detail {
+            font-size: 0.85rem;
+            color: rgba(255,255,255,0.8);
+            line-height: 1.5;
+        }
+
+        /* Network elements */
+        .network-link { stroke-opacity: 0.5; fill: none; }
+        .network-link-glow { stroke-opacity: 0.2; fill: none; filter: blur(3px); }
+        .node-group { cursor: pointer; }
+        .node-ring { fill: none; stroke-width: 4; }
+        .node-ring-glow { fill: none; stroke-width: 12; opacity: 0.3; filter: blur(4px); }
+        .node-label {
+            font-size: 11px;
+            font-weight: 600;
+            fill: #fff;
+            text-anchor: middle;
+            text-shadow: 0 0 8px rgba(0,0,0,0.9), 0 0 15px rgba(0,0,0,0.9);
+            pointer-events: none;
+        }
+
+        .fraud-factory-node {
+            animation: pulse-red 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <!-- Base Map -->
+    <div id="map"></div>
+
+    <!-- Overlay A: Map markers and connections -->
+    <div id="overlay-map">
+        <svg id="map-connections"></svg>
+    </div>
+
+    <!-- Overlay B: Face network -->
+    <div id="overlay-network">
+        <svg id="network-svg"></svg>
+    </div>
+
+    <!-- UI Elements -->
+    <div class="overlay-title">
+        <h1>The Fraud Factory</h1>
+        <div class="subtitle" id="view-subtitle">Geographic Scale of Corruption Across Los Angeles County</div>
+    </div>
+
+    <div class="legend">
+        <h3>Role in Scheme</h3>
+        <div class="legend-item">
+            <div class="legend-marker" style="background: #dc3545; box-shadow: 0 0 10px #dc3545;"></div>
+            <span>Created the Fraud</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-marker" style="background: #fd7e14; box-shadow: 0 0 10px #fd7e14;"></div>
+            <span>Enforced / Prosecuted</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-marker" style="background: #ffc107; box-shadow: 0 0 10px #ffc107;"></div>
+            <span>Covered Up</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-marker" style="background: #6c757d; box-shadow: 0 0 10px #6c757d;"></div>
+            <span>Institutional</span>
+        </div>
+    </div>
+
+    <div class="stats-panel">
+        <h3>The Scale</h3>
+        <div class="stat-row">
+            <div class="stat-value">4,752</div>
+            <div class="stat-label">Square Miles</div>
+        </div>
+        <div class="stat-row">
+            <div class="stat-value">10M+</div>
+            <div class="stat-label">People Affected</div>
+        </div>
+        <div class="stat-row">
+            <div class="stat-value">1 in 441K</div>
+            <div class="stat-label">Odds of Coincidence</div>
+        </div>
+        <div class="stat-row">
+            <div class="stat-value">0</div>
+            <div class="stat-label">Who Stopped It</div>
+        </div>
+    </div>
+
+    <div class="toggle-container">
+        <button class="toggle-btn active" id="btn-locations" onclick="showLocations()">
+            Show Locations
+        </button>
+        <button class="toggle-btn" id="btn-faces" onclick="showFaces()">
+            Show Faces
+        </button>
+        <button class="toggle-btn secondary" id="btn-fly" onclick="flyToFraudFactory()">
+            Fly to Courthouse
+        </button>
+    </div>
+
+    <div class="network-tooltip" id="network-tooltip"></div>
+
+    <script>
+        // ==================== CONFIGURATION ====================
+        mapboxgl.accessToken = 'pk.eyJ1IjoibWFybG93c2E1Njc4IiwiYSI6ImNtazM1OWU1MjBtd2MzZW9ndXFyaDRic2wifQ.hE48oMee_n-JjqqWjYDI1Q';
+        const imgBase = './images/';
+
+        // Colors
+        const colors = {
+            'fraud-factory': '#dc3545',
+            created: '#dc3545',
+            enforced: '#fd7e14',
+            coverup: '#ffc107',
+            institutional: '#6c757d',
+            victim: '#ffffff'
+        };
+
+        // ==================== MAP LOCATIONS ====================
+        const mapLocations = [
+            { id: 'fraud-factory', name: 'Stanley Mosk Courthouse', coords: [-118.2439, 34.0544], role: 'fraud-factory', roleLabel: 'THE FRAUD FACTORY', detail: 'The largest trial court in the United States. Inside it, a fraud factory produces fake restraining orders on demand.', markerClass: 'map-marker-fraud-factory' },
+            { id: 'majd', name: 'Majd & Associates', coords: [-118.4021, 34.0736], role: 'created', roleLabel: 'Attorney Filing Fraud', detail: 'Farbood Majd files applications that bypass judicial review.', markerClass: 'map-marker-created' },
+            { id: 'costa-rica', name: 'Costa Rica Consulate', coords: [-118.2706, 34.0392], role: 'institutional', roleLabel: 'Diplomatic Connection', detail: 'Ana Rojas claims diplomatic status through Costa Rica.', markerClass: 'map-marker-institutional' },
+            { id: 'west-la-pd', name: 'West LA Police', coords: [-118.4505, 34.0349], role: 'enforced', roleLabel: 'Enforced Despite No CLETS', detail: 'Officers verified NO orders in CLETS on 4 occasions. Enforced anyway.', markerClass: 'map-marker-enforced' },
+            { id: 'dcfs', name: 'DCFS', coords: [-118.2833, 34.0617], role: 'institutional', roleLabel: 'Closed Abuse Investigation', detail: 'Closed the investigation into Arlo\'s brain damage.', markerClass: 'map-marker-institutional' },
+            { id: 'da-office', name: 'District Attorney', coords: [-118.2467, 34.0539], role: 'enforced', roleLabel: 'Prosecuted Void Orders', detail: 'Filed criminal charges for violating orders never in CLETS.', markerClass: 'map-marker-enforced' },
+            { id: 'airport-courthouse', name: 'Airport Courthouse', coords: [-118.3796, 33.9299], role: 'coverup', roleLabel: 'Judge Gonzalez', detail: '"Whether or not the orders are in the system is irrelevant."', markerClass: 'map-marker-coverup' },
+            { id: 'wegman-levin', name: 'Wegman & Levin', coords: [-118.4486, 34.1612], role: 'coverup', roleLabel: 'Defense Failure', detail: 'Four attorneys. None verified CLETS.', markerClass: 'map-marker-coverup' },
+            { id: 'kerry-residence', name: 'Kerry Family Home', coords: [-118.4150, 34.0520], role: 'victim', roleLabel: 'Scene of Abduction', detail: 'July 31, 2023: Brain-damaged infant taken from protective father.', markerClass: 'map-marker-victim' }
+        ];
+
+        const mapConnections = [
+            { from: 'fraud-factory', to: 'majd' },
+            { from: 'fraud-factory', to: 'da-office' },
+            { from: 'fraud-factory', to: 'west-la-pd' },
+            { from: 'fraud-factory', to: 'dcfs' },
+            { from: 'fraud-factory', to: 'airport-courthouse' },
+            { from: 'majd', to: 'kerry-residence' },
+            { from: 'west-la-pd', to: 'kerry-residence' },
+            { from: 'wegman-levin', to: 'fraud-factory' },
+        ];
+
+        // ==================== NETWORK NODES ====================
+        const networkNodes = [
+            { id: "fraud-factory", label: "THE FRAUD\nFACTORY", group: "fraud-factory", role: "Stanley Mosk Courthouse", detail: "The largest trial court in the United States. Inside it operates a fraud factory.", size: 50, isCenter: true },
+            { id: "majd", label: "Farbood Majd", group: "created", role: "Attorney - Bar #209498", detail: "Files fraudulent applications. Appears on bodycam executing fake orders.", image: imgBase + "farbood-majd.jpg", size: 42 },
+            { id: "mikaelian", label: "Gevork Mikaelian", group: "created", role: "Court Clerk", detail: "Processed ALL THREE fraudulent applications. Applied unauthorized stamp. The inside man.", image: imgBase + "gevork-mikaelian.jpg", size: 42 },
+            { id: "ana", label: "Ana Rojas", group: "created", role: "Petitioner / Abuser", detail: "Caused brain damage to infant Arlo. Used fraud to escape investigation.", image: imgBase + "ana-rojas.png", size: 38 },
+            { id: "diaz", label: "Officer Diaz", group: "enforced", role: "LAPD", detail: "12-minute CLETS search found NOTHING. Orders enforced anyway.", image: imgBase + "officer-diaz.png", size: 32 },
+            { id: "wasserman", label: "David Wasserman", group: "coverup", role: "Family Court Judge", detail: "False explanation about stamps. Knew he lacked jurisdiction.", image: imgBase + "david-wasserman.jpg", size: 38 },
+            { id: "gonzalez", label: "Liliana Gonzalez", group: "coverup", role: "Criminal Judge", detail: "'CLETS is irrelevant' - contradicting California law.", image: imgBase + "liliana-gonzalez.jpg", size: 38 },
+            { id: "cheney", label: "Chris Cheney", group: "coverup", role: "Defense Attorney", detail: "Promoted the fake order scheme to his own client as legitimate.", image: imgBase + "chris-cheney.png", size: 32 },
+            { id: "levin", label: "Michael Levin", group: "coverup", role: "Wegman & Levin", detail: "Part of defense team that failed to verify CLETS.", image: imgBase + "michael-levin.jpg", size: 32 },
+            { id: "israni", label: "Suneeta Israni", group: "institutional", role: "Official", detail: "Institutional complicity in processing fraudulent orders.", image: imgBase + "suneeta-israni.jpg", size: 32 },
+            { id: "esteban", label: "Esteban Rojas", group: "institutional", role: "Ana's Father", detail: "Involved in conspiracy to obtain fraudulent orders.", image: imgBase + "esteban-rojas.png", size: 32 }
+        ];
+
+        const networkLinks = [
+            { source: "majd", target: "fraud-factory", type: "created" },
+            { source: "mikaelian", target: "fraud-factory", type: "created" },
+            { source: "ana", target: "fraud-factory", type: "created" },
+            { source: "majd", target: "mikaelian", type: "created" },
+            { source: "majd", target: "ana", type: "created" },
+            { source: "ana", target: "esteban", type: "institutional" },
+            { source: "diaz", target: "fraud-factory", type: "enforced" },
+            { source: "wasserman", target: "fraud-factory", type: "coverup" },
+            { source: "gonzalez", target: "fraud-factory", type: "coverup" },
+            { source: "cheney", target: "fraud-factory", type: "coverup" },
+            { source: "levin", target: "fraud-factory", type: "coverup" },
+            { source: "israni", target: "fraud-factory", type: "institutional" },
+        ];
+
+        // ==================== STATE ====================
+        let currentView = 'locations'; // 'locations' or 'faces'
+        let mapMarkers = {};
+
+        // ==================== INITIALIZE MAP ====================
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/navigation-night-v1',
+            center: [-118.35, 34.02],
+            zoom: 9.5,
+            pitch: 60,
+            bearing: -15,
+            antialias: true
+        });
+
+        map.on('load', () => {
+            // Add terrain
+            map.addSource('mapbox-dem', {
+                type: 'raster-dem',
+                url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+                tileSize: 512,
+                maxzoom: 14
+            });
+            map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
+
+            // Add sky
+            map.addLayer({
+                id: 'sky',
+                type: 'sky',
+                paint: {
+                    'sky-type': 'atmosphere',
+                    'sky-atmosphere-sun': [0.0, 0.0],
+                    'sky-atmosphere-sun-intensity': 15
+                }
+            });
+
+            // Add 3D buildings
+            const layers = map.getStyle().layers;
+            const labelLayerId = layers.find(layer => layer.type === 'symbol' && layer.layout['text-field'])?.id;
+            map.addLayer({
+                id: 'add-3d-buildings',
+                source: 'composite',
+                'source-layer': 'building',
+                filter: ['==', 'extrude', 'true'],
+                type: 'fill-extrusion',
+                minzoom: 12,
+                paint: {
+                    'fill-extrusion-color': ['interpolate', ['linear'], ['get', 'height'], 0, '#1a1a2e', 50, '#16213e', 100, '#0f3460', 200, '#1a1a4e'],
+                    'fill-extrusion-height': ['get', 'height'],
+                    'fill-extrusion-base': ['get', 'min_height'],
+                    'fill-extrusion-opacity': 0.85
+                }
+            }, labelLayerId);
+
+            // Add map markers
+            mapLocations.forEach(loc => {
+                const el = document.createElement('div');
+                el.className = `map-marker ${loc.markerClass}`;
+                if (loc.role === 'fraud-factory') el.innerHTML = '!';
+
+                const marker = new mapboxgl.Marker(el).setLngLat(loc.coords).addTo(map);
+                mapMarkers[loc.id] = { marker, element: el };
+
+                const popup = new mapboxgl.Popup({ offset: 25, closeButton: true, closeOnClick: false })
+                    .setHTML(`<div class="popup-title">${loc.name}</div><div class="popup-role role-${loc.role}">${loc.roleLabel}</div><div class="popup-detail">${loc.detail}</div>`);
+
+                el.addEventListener('click', () => {
+                    document.querySelectorAll('.mapboxgl-popup').forEach(p => p.remove());
+                    popup.setLngLat(loc.coords).addTo(map);
+                    map.flyTo({ center: loc.coords, zoom: 15, pitch: 65, duration: 2500 });
+                });
+            });
+
+            updateMapConnections();
+
+            // Initial fly-in
+            setTimeout(() => {
+                map.flyTo({ center: [-118.32, 34.04], zoom: 11, pitch: 60, bearing: 10, duration: 4000 });
+            }, 1000);
+        });
+
+        map.on('move', updateMapConnections);
+        map.on('zoom', updateMapConnections);
+        map.on('pitch', updateMapConnections);
+        map.on('rotate', updateMapConnections);
+
+        function updateMapConnections() {
+            const svg = document.getElementById('map-connections');
+            svg.innerHTML = '';
+
+            mapConnections.forEach(conn => {
+                const fromLoc = mapLocations.find(l => l.id === conn.from);
+                const toLoc = mapLocations.find(l => l.id === conn.to);
+                if (!fromLoc || !toLoc) return;
+
+                const fromPoint = map.project(fromLoc.coords);
+                const toPoint = map.project(toLoc.coords);
+                const midX = (fromPoint.x + toPoint.x) / 2;
+                const midY = (fromPoint.y + toPoint.y) / 2;
+                const dx = toPoint.x - fromPoint.x;
+                const dy = toPoint.y - fromPoint.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 1) return;
+
+                const curveOffset = dist * 0.25;
+                const perpX = -dy / dist * curveOffset;
+                const perpY = dx / dist * curveOffset;
+                const pathData = `M ${fromPoint.x} ${fromPoint.y} Q ${midX + perpX} ${midY + perpY} ${toPoint.x} ${toPoint.y}`;
+
+                const hiddenClass = currentView === 'faces' ? ' hidden' : '';
+
+                const glowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                glowPath.setAttribute('d', pathData);
+                glowPath.setAttribute('class', 'map-connection-glow' + hiddenClass);
+                svg.appendChild(glowPath);
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', pathData);
+                path.setAttribute('class', 'map-connection-line' + hiddenClass);
+                svg.appendChild(path);
+            });
+        }
+
+        // ==================== INITIALIZE NETWORK ====================
+        const networkSvg = d3.select("#network-svg");
+        const networkTooltip = d3.select("#network-tooltip");
+        let networkSimulation;
+
+        function initNetwork() {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+
+            networkSvg.attr("viewBox", [0, 0, width, height]);
+
+            // Create clip paths
+            const defs = networkSvg.append("defs");
+            networkNodes.forEach(node => {
+                if (node.image) {
+                    defs.append("clipPath")
+                        .attr("id", `clip-${node.id}`)
+                        .append("circle")
+                        .attr("r", node.size - 4)
+                        .attr("cx", 0)
+                        .attr("cy", 0);
+                }
+            });
+
+            // Simulation
+            networkSimulation = d3.forceSimulation(networkNodes)
+                .force("link", d3.forceLink(networkLinks).id(d => d.id).distance(160))
+                .force("charge", d3.forceManyBody().strength(-1000))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("collision", d3.forceCollide().radius(d => d.size + 25));
+
+            // Link glows
+            const linkGlow = networkSvg.append("g").selectAll("line").data(networkLinks).join("line")
+                .attr("class", "network-link-glow")
+                .attr("stroke", d => colors[d.type] || colors.created)
+                .attr("stroke-width", 10);
+
+            // Links
+            const link = networkSvg.append("g").selectAll("line").data(networkLinks).join("line")
+                .attr("class", "network-link")
+                .attr("stroke", d => colors[d.type] || colors.created)
+                .attr("stroke-width", 2);
+
+            // Nodes
+            const nodeGroup = networkSvg.append("g").selectAll("g").data(networkNodes).join("g")
+                .attr("class", "node-group")
+                .call(d3.drag().on("start", dragstarted).on("drag", dragged).on("end", dragended));
+
+            nodeGroup.append("circle").attr("class", "node-ring-glow").attr("r", d => d.size + 2).attr("stroke", d => colors[d.group]);
+            nodeGroup.append("circle").attr("class", "node-ring").attr("r", d => d.size).attr("stroke", d => colors[d.group]);
+
+            nodeGroup.each(function(d) {
+                const g = d3.select(this);
+                if (d.image) {
+                    g.append("image")
+                        .attr("xlink:href", d.image)
+                        .attr("x", -(d.size - 4))
+                        .attr("y", -(d.size - 4))
+                        .attr("width", (d.size - 4) * 2)
+                        .attr("height", (d.size - 4) * 2)
+                        .attr("clip-path", `url(#clip-${d.id})`)
+                        .attr("preserveAspectRatio", "xMidYMid slice");
+                } else {
+                    g.append("circle").attr("class", "fraud-factory-node").attr("r", d.size - 4).attr("fill", "rgba(220, 53, 69, 0.3)");
+                    g.append("text").attr("text-anchor", "middle").attr("dominant-baseline", "middle").attr("fill", "#fff").attr("font-size", "28px").attr("font-weight", "bold").text("!");
+                }
+            });
+
+            nodeGroup.append("text").attr("class", "node-label").attr("y", d => d.size + 16)
+                .selectAll("tspan").data(d => d.label.split("\n")).join("tspan")
+                .attr("x", 0).attr("dy", (d, i) => i ? "1.2em" : 0).text(d => d);
+
+            nodeGroup.on("mouseover", function(event, d) {
+                networkTooltip.style("opacity", 1).html(`<h4>${d.label.replace("\n", " ")}</h4><div class="role role-${d.group}">${d.role}</div><div class="detail">${d.detail}</div>`);
+                d3.select(this).select(".node-ring").transition().duration(200).attr("stroke-width", 6);
+            })
+            .on("mousemove", function(event) {
+                networkTooltip.style("left", (event.pageX + 20) + "px").style("top", (event.pageY - 20) + "px");
+            })
+            .on("mouseout", function() {
+                networkTooltip.style("opacity", 0);
+                d3.select(this).select(".node-ring").transition().duration(200).attr("stroke-width", 4);
+            });
+
+            networkSimulation.on("tick", () => {
+                linkGlow.attr("x1", d => d.source.x).attr("y1", d => d.source.y).attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+                link.attr("x1", d => d.source.x).attr("y1", d => d.source.y).attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+                nodeGroup.attr("transform", d => `translate(${d.x},${d.y})`);
+            });
+
+            function dragstarted(event) { if (!event.active) networkSimulation.alphaTarget(0.3).restart(); event.subject.fx = event.subject.x; event.subject.fy = event.subject.y; }
+            function dragged(event) { event.subject.fx = event.x; event.subject.fy = event.y; }
+            function dragended(event) { if (!event.active) networkSimulation.alphaTarget(0); event.subject.fx = null; event.subject.fy = null; }
+        }
+
+        initNetwork();
+
+        // ==================== VIEW TOGGLE ====================
+        function showLocations() {
+            currentView = 'locations';
+            document.getElementById('overlay-network').classList.remove('visible');
+            document.getElementById('btn-locations').classList.add('active');
+            document.getElementById('btn-faces').classList.remove('active');
+            document.getElementById('view-subtitle').textContent = 'Geographic Scale of Corruption Across Los Angeles County';
+
+            // Show map markers
+            Object.values(mapMarkers).forEach(m => m.element.classList.remove('hidden'));
+            updateMapConnections();
+        }
+
+        function showFaces() {
+            currentView = 'faces';
+            document.getElementById('overlay-network').classList.add('visible');
+            document.getElementById('btn-faces').classList.add('active');
+            document.getElementById('btn-locations').classList.remove('active');
+            document.getElementById('view-subtitle').textContent = 'The Conspirators Behind the Scheme';
+
+            // Hide map markers
+            Object.values(mapMarkers).forEach(m => m.element.classList.add('hidden'));
+            document.querySelectorAll('.mapboxgl-popup').forEach(p => p.remove());
+            updateMapConnections();
+
+            // Restart network simulation
+            if (networkSimulation) networkSimulation.alpha(0.3).restart();
+        }
+
+        function flyToFraudFactory() {
+            if (currentView === 'faces') showLocations();
+            map.flyTo({ center: [-118.2439, 34.0544], zoom: 16, pitch: 70, bearing: 30, duration: 4000 });
+            setTimeout(() => {
+                const loc = mapLocations.find(l => l.id === 'fraud-factory');
+                new mapboxgl.Popup({ offset: 25, closeButton: true })
+                    .setLngLat(loc.coords)
+                    .setHTML(`<div class="popup-title">${loc.name}</div><div class="popup-role role-fraud-factory">${loc.roleLabel}</div><div class="popup-detail">${loc.detail}</div>`)
+                    .addTo(map);
+            }, 4000);
+        }
+
+        // Navigation controls
+        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+        // Handle resize
+        window.addEventListener('resize', () => {
+            updateMapConnections();
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            networkSvg.attr("viewBox", [0, 0, width, height]);
+            if (networkSimulation) {
+                networkSimulation.force("center", d3.forceCenter(width / 2, height / 2));
+                networkSimulation.alpha(0.3).restart();
+            }
+        });
+    </script>
+</body>
+</html>
