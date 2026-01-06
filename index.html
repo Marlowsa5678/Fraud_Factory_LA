@@ -581,20 +581,20 @@
                     'fill-extrusion-color': ['interpolate', ['linear'], ['get', 'height'], 0, '#1a1a2e', 50, '#16213e', 100, '#0f3460', 200, '#1a1a4e'],
                     'fill-extrusion-height': ['get', 'height'],
                     'fill-extrusion-base': ['get', 'min_height'],
-                    'fill-extrusion-opacity': 0.6
+                    'fill-extrusion-opacity': 0.75
                 }
             }, labelLayerId);
 
-            // HIDE ALL LABELS - per Lynne's feedback: let the corruption web stand out
+            // HIDE TEXT LABELS ONLY - keep road structure visible
             layers.forEach(layer => {
-                // Hide all text labels (place names, road names, etc.)
+                // Hide all text labels (place names, road names, highway shields)
                 if (layer.type === 'symbol') {
                     map.setLayoutProperty(layer.id, 'visibility', 'none');
                 }
-                // Dim the road lines significantly
+                // Keep roads visible at 40% - shows LA geography without distraction
                 if (layer.id.includes('road') || layer.id.includes('bridge') || layer.id.includes('tunnel')) {
                     if (layer.type === 'line') {
-                        map.setPaintProperty(layer.id, 'line-opacity', 0.15);
+                        map.setPaintProperty(layer.id, 'line-opacity', 0.4);
                     }
                 }
             });
