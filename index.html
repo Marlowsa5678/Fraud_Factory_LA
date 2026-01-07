@@ -456,6 +456,101 @@
             pointer-events: all;
         }
 
+        /* Face Hub - orbital faces around courthouse */
+        .face-hub-container {
+            position: absolute;
+            pointer-events: none;
+            z-index: 80;
+        }
+
+        .face-hub-marker {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            cursor: pointer;
+            pointer-events: all;
+            transform: translate(-50%, -50%);
+            transition: all 0.3s ease;
+            overflow: hidden;
+            border: 3px solid;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        .face-hub-marker:hover {
+            transform: translate(-50%, -50%) scale(1.2);
+            z-index: 100;
+        }
+
+        .face-hub-marker img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .face-hub-marker .face-label {
+            position: absolute;
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            font-weight: 600;
+            color: #fff;
+            white-space: nowrap;
+            text-shadow: 0 0 10px rgba(0,0,0,0.9);
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .face-hub-marker:hover .face-label {
+            opacity: 1;
+        }
+
+        .face-hub-marker.created { border-color: #dc3545; box-shadow: 0 0 15px rgba(220, 53, 69, 0.6); }
+        .face-hub-marker.enforced { border-color: #fd7e14; box-shadow: 0 0 15px rgba(253, 126, 20, 0.6); }
+        .face-hub-marker.coverup { border-color: #ffc107; box-shadow: 0 0 15px rgba(255, 193, 7, 0.6); }
+        .face-hub-marker.institutional { border-color: #6c757d; box-shadow: 0 0 15px rgba(108, 117, 125, 0.6); }
+
+        .face-hub-marker.active {
+            animation: face-pulse 1s ease-out;
+        }
+
+        @keyframes face-pulse {
+            0% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.3); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+
+        /* Animated corruption line */
+        .animated-line {
+            stroke: rgba(220, 53, 69, 0.9);
+            stroke-width: 4;
+            fill: none;
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+        }
+
+        .animated-line.animating {
+            animation: draw-line 1.5s ease-out forwards;
+        }
+
+        .animated-line-glow {
+            stroke: rgba(220, 53, 69, 0.3);
+            stroke-width: 15;
+            fill: none;
+            filter: blur(5px);
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+        }
+
+        .animated-line-glow.animating {
+            animation: draw-line 1.5s ease-out forwards;
+        }
+
+        @keyframes draw-line {
+            to { stroke-dashoffset: 0; }
+        }
+
         .network-tooltip .role {
             font-size: 0.75rem;
             text-transform: uppercase;
@@ -497,7 +592,11 @@
     <!-- Overlay A: Map markers and connections -->
     <div id="overlay-map">
         <svg id="map-connections"></svg>
+        <svg id="animated-connections" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></svg>
     </div>
+
+    <!-- Face Hub - orbiting faces around courthouse -->
+    <div id="face-hub" class="face-hub-container"></div>
 
     <!-- Overlay B: Face network -->
     <div id="overlay-network">
@@ -558,7 +657,7 @@
             Show Faces
         </button>
         <button class="toggle-btn secondary" id="btn-fly" onclick="flyToFraudFactory()">
-            Fly to Courthouse
+            Back to Hub
         </button>
     </div>
 
@@ -647,6 +746,25 @@
         // ==================== STATE ====================
         let currentView = 'locations'; // 'locations' or 'faces'
         let mapMarkers = {};
+        let faceHubMarkers = [];
+
+        // ==================== FACE HUB DATA ====================
+        // Faces that orbit the courthouse - each links to a destination
+        const faceHubData = [
+            { id: 'majd', name: 'Farbood Majd', image: imgBase + 'farbood-majd.jpg', group: 'created', role: 'Attorney', detail: 'Files fraudulent applications', destLocation: 'majd', angle: 0 },
+            { id: 'mikaelian', name: 'Gevork Mikaelian', image: imgBase + 'gevork-mikaelian.jpg', group: 'created', role: 'Court Clerk', detail: 'The inside man - processed all 3 fake orders', destLocation: 'fraud-factory', angle: 36 },
+            { id: 'ana', name: 'Ana Rojas', image: imgBase + 'ana-rojas.png', group: 'created', role: 'Abuser', detail: 'Caused infant brain damage', destLocation: 'kerry-residence', angle: 72 },
+            { id: 'diaz', name: 'Officer Diaz', image: imgBase + 'officer-diaz.png', group: 'enforced', role: 'LAPD', detail: '12min CLETS search found nothing', destLocation: 'west-la-pd', angle: 108 },
+            { id: 'wasserman', name: 'David Wasserman', image: imgBase + 'david-wasserman.jpg', group: 'coverup', role: 'Family Judge', detail: 'False stamp explanation', destLocation: 'fraud-factory', angle: 144 },
+            { id: 'gonzalez', name: 'Liliana Gonzalez', image: imgBase + 'liliana-gonzalez.jpg', group: 'coverup', role: 'Criminal Judge', detail: 'CLETS is irrelevant', destLocation: 'airport-courthouse', angle: 180 },
+            { id: 'israni', name: 'Suneeta Israni', image: imgBase + 'suneeta-israni.jpg', group: 'institutional', role: 'Prosecutor', detail: 'Evidence tampering', destLocation: 'airport-courthouse', angle: 216 },
+            { id: 'cheney', name: 'Chris Cheney', image: imgBase + 'chris-cheney.png', group: 'coverup', role: 'Defense Attorney', detail: 'Failed to verify CLETS', destLocation: 'wegman-levin', angle: 252 },
+            { id: 'levin', name: 'Michael Levin', image: imgBase + 'michael-levin.jpg', group: 'coverup', role: 'Wegman & Levin', detail: 'Defense team failure', destLocation: 'wegman-levin', angle: 288 },
+            { id: 'esteban', name: 'Esteban Rojas', image: imgBase + 'esteban-rojas.png', group: 'institutional', role: 'Ana\'s Father', detail: 'Conspiracy participant', destLocation: 'costa-rica', angle: 324 }
+        ];
+
+        const COURTHOUSE_COORDS = [-118.2439, 34.0544]; // Stanley Mosk
+        const HUB_RADIUS = 120; // pixels from courthouse center
 
         // ==================== INITIALIZE MAP ====================
         const map = new mapboxgl.Map({
@@ -737,16 +855,21 @@
 
             updateMapConnections();
 
-            // Initial fly-in
+            // Initial fly-in - center on courthouse
             setTimeout(() => {
-                map.flyTo({ center: [-118.32, 34.04], zoom: 11, pitch: 60, bearing: 10, duration: 4000 });
+                map.flyTo({ center: COURTHOUSE_COORDS, zoom: 11.5, pitch: 55, bearing: 0, duration: 4000 });
             }, 1000);
+
+            // Initialize face hub after map settles
+            setTimeout(() => {
+                initFaceHub();
+            }, 2000);
         });
 
-        map.on('move', updateMapConnections);
-        map.on('zoom', updateMapConnections);
-        map.on('pitch', updateMapConnections);
-        map.on('rotate', updateMapConnections);
+        map.on('move', () => { updateMapConnections(); updateFaceHubPositions(); });
+        map.on('zoom', () => { updateMapConnections(); updateFaceHubPositions(); });
+        map.on('pitch', () => { updateMapConnections(); updateFaceHubPositions(); });
+        map.on('rotate', () => { updateMapConnections(); updateFaceHubPositions(); });
 
         function updateMapConnections() {
             const svg = document.getElementById('map-connections');
@@ -783,6 +906,136 @@
                 path.setAttribute('class', 'map-connection-line' + hiddenClass);
                 svg.appendChild(path);
             });
+        }
+
+        // ==================== FACE HUB FUNCTIONS ====================
+        function initFaceHub() {
+            const container = document.getElementById('face-hub');
+            container.innerHTML = '';
+            faceHubMarkers = [];
+
+            faceHubData.forEach(face => {
+                const marker = document.createElement('div');
+                marker.className = `face-hub-marker ${face.group}`;
+                marker.innerHTML = `
+                    <img src="${face.image}" alt="${face.name}" onerror="this.style.display='none'">
+                    <div class="face-label">${face.name}</div>
+                `;
+                marker.dataset.faceId = face.id;
+
+                marker.addEventListener('click', () => onFaceHubClick(face));
+
+                container.appendChild(marker);
+                faceHubMarkers.push({ element: marker, data: face });
+            });
+
+            updateFaceHubPositions();
+        }
+
+        function updateFaceHubPositions() {
+            const courthousePoint = map.project(COURTHOUSE_COORDS);
+
+            faceHubMarkers.forEach(({ element, data }) => {
+                const angleRad = (data.angle - 90) * Math.PI / 180;
+                const x = courthousePoint.x + Math.cos(angleRad) * HUB_RADIUS;
+                const y = courthousePoint.y + Math.sin(angleRad) * HUB_RADIUS;
+
+                element.style.left = x + 'px';
+                element.style.top = y + 'px';
+            });
+        }
+
+        function onFaceHubClick(face) {
+            // Find destination location
+            const destLoc = mapLocations.find(l => l.id === face.destLocation);
+            if (!destLoc) return;
+
+            // Pulse the clicked face
+            const marker = faceHubMarkers.find(m => m.data.id === face.id);
+            if (marker) {
+                marker.element.classList.add('active');
+                setTimeout(() => marker.element.classList.remove('active'), 1000);
+            }
+
+            // Animate the connection line
+            animateConnectionLine(COURTHOUSE_COORDS, destLoc.coords, () => {
+                // After animation, fly to destination and show card
+                map.flyTo({ center: destLoc.coords, zoom: 14.5, pitch: 65, duration: 2500 });
+
+                setTimeout(() => {
+                    if (destLoc.hasCard) {
+                        showLocationCard(destLoc);
+                    } else {
+                        // Show popup
+                        new mapboxgl.Popup({ offset: 25, closeButton: true })
+                            .setLngLat(destLoc.coords)
+                            .setHTML(`
+                                <div class="popup-title">${destLoc.name}</div>
+                                <div class="popup-role role-${destLoc.role}">${destLoc.roleLabel}</div>
+                                <div class="popup-detail">${destLoc.detail}</div>
+                                <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.2);font-size:0.8rem;color:rgba(255,255,255,0.6);">
+                                    <strong>${face.name}</strong>: ${face.detail}
+                                </div>
+                            `)
+                            .addTo(map);
+                    }
+                }, 2000);
+            });
+        }
+
+        function animateConnectionLine(fromCoords, toCoords, callback) {
+            const svg = document.getElementById('animated-connections');
+            svg.innerHTML = '';
+
+            const fromPoint = map.project(fromCoords);
+            const toPoint = map.project(toCoords);
+
+            // Calculate curved path
+            const midX = (fromPoint.x + toPoint.x) / 2;
+            const midY = (fromPoint.y + toPoint.y) / 2;
+            const dx = toPoint.x - fromPoint.x;
+            const dy = toPoint.y - fromPoint.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const curveOffset = dist * 0.2;
+            const perpX = -dy / dist * curveOffset;
+            const perpY = dx / dist * curveOffset;
+
+            const pathData = `M ${fromPoint.x} ${fromPoint.y} Q ${midX + perpX} ${midY + perpY} ${toPoint.x} ${toPoint.y}`;
+
+            // Create glow path
+            const glowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            glowPath.setAttribute('d', pathData);
+            glowPath.setAttribute('class', 'animated-line-glow');
+            svg.appendChild(glowPath);
+
+            // Create main path
+            const mainPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            mainPath.setAttribute('d', pathData);
+            mainPath.setAttribute('class', 'animated-line');
+            svg.appendChild(mainPath);
+
+            // Get path length and set it
+            const pathLength = mainPath.getTotalLength();
+            mainPath.style.strokeDasharray = pathLength;
+            mainPath.style.strokeDashoffset = pathLength;
+            glowPath.style.strokeDasharray = pathLength;
+            glowPath.style.strokeDashoffset = pathLength;
+
+            // Trigger animation
+            requestAnimationFrame(() => {
+                mainPath.classList.add('animating');
+                glowPath.classList.add('animating');
+            });
+
+            // Clear after animation and callback
+            setTimeout(() => {
+                if (callback) callback();
+            }, 1500);
+
+            // Keep the line visible for a bit then fade
+            setTimeout(() => {
+                svg.innerHTML = '';
+            }, 5000);
         }
 
         // ==================== INITIALIZE NETWORK ====================
@@ -913,14 +1166,11 @@
 
         function flyToFraudFactory() {
             if (currentView === 'faces') showLocations();
-            map.flyTo({ center: [-118.2439, 34.0544], zoom: 16, pitch: 70, bearing: 30, duration: 4000 });
-            setTimeout(() => {
-                const loc = mapLocations.find(l => l.id === 'fraud-factory');
-                new mapboxgl.Popup({ offset: 25, closeButton: true })
-                    .setLngLat(loc.coords)
-                    .setHTML(`<div class="popup-title">${loc.name}</div><div class="popup-role role-fraud-factory">${loc.roleLabel}</div><div class="popup-detail">${loc.detail}</div>`)
-                    .addTo(map);
-            }, 4000);
+            // Close any popups and cards
+            document.querySelectorAll('.mapboxgl-popup').forEach(p => p.remove());
+            closeLocationCard();
+            // Fly back to hub view centered on courthouse
+            map.flyTo({ center: COURTHOUSE_COORDS, zoom: 11.5, pitch: 55, bearing: 0, duration: 3000 });
         }
 
         // Navigation controls
@@ -929,6 +1179,7 @@
         // Handle resize
         window.addEventListener('resize', () => {
             updateMapConnections();
+            updateFaceHubPositions();
             const width = window.innerWidth;
             const height = window.innerHeight;
             networkSvg.attr("viewBox", [0, 0, width, height]);
