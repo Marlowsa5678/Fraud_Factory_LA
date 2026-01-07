@@ -651,7 +651,7 @@
         // ==================== INITIALIZE MAP ====================
         const map = new mapboxgl.Map({
             container: 'map',
-            style: 'mapbox://styles/mapbox/dark-v11',
+            style: 'mapbox://styles/mapbox/satellite-streets-v12',
             center: [-118.35, 34.02],
             zoom: 9.5,
             pitch: 60,
@@ -667,7 +667,7 @@
                 tileSize: 512,
                 maxzoom: 14
             });
-            map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
+            map.setTerrain({ source: 'mapbox-dem', exaggeration: 2.0 });
 
             // Add sky
             map.addLayer({
@@ -680,7 +680,7 @@
                 }
             });
 
-            // Add 3D buildings
+            // Add 3D buildings - darker/translucent on satellite
             const layers = map.getStyle().layers;
             const labelLayerId = layers.find(layer => layer.type === 'symbol' && layer.layout['text-field'])?.id;
             map.addLayer({
@@ -689,25 +689,23 @@
                 'source-layer': 'building',
                 filter: ['==', 'extrude', 'true'],
                 type: 'fill-extrusion',
-                minzoom: 12,
+                minzoom: 13,
                 paint: {
-                    'fill-extrusion-color': ['interpolate', ['linear'], ['get', 'height'], 0, '#1a1a2e', 50, '#16213e', 100, '#0f3460', 200, '#1a1a4e'],
+                    'fill-extrusion-color': '#1a1a2e',
                     'fill-extrusion-height': ['get', 'height'],
                     'fill-extrusion-base': ['get', 'min_height'],
-                    'fill-extrusion-opacity': 0.75
+                    'fill-extrusion-opacity': 0.7
                 }
             }, labelLayerId);
 
-            // HIDE TEXT LABELS ONLY - keep road structure visible
+            // Hide most labels - keep major place names only
             layers.forEach(layer => {
-                // Hide all text labels (place names, road names, highway shields)
                 if (layer.type === 'symbol') {
-                    map.setLayoutProperty(layer.id, 'visibility', 'none');
-                }
-                // Keep roads visible at 40% - shows LA geography without distraction
-                if (layer.id.includes('road') || layer.id.includes('bridge') || layer.id.includes('tunnel')) {
-                    if (layer.type === 'line') {
-                        map.setPaintProperty(layer.id, 'line-opacity', 0.4);
+                    // Keep only major settlement labels for context
+                    if (layer.id.includes('settlement-major') || layer.id.includes('country') || layer.id.includes('state')) {
+                        // Keep these visible
+                    } else {
+                        map.setLayoutProperty(layer.id, 'visibility', 'none');
                     }
                 }
             });
